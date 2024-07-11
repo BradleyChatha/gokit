@@ -14,6 +14,8 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
+	oteltrace "go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
 )
 
 var testExporter *tracetest.InMemoryExporter
@@ -296,6 +298,23 @@ func TestSamplerFromEnv(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestTracerFromContextRemoteSpans(t *testing.T) {
+	// Setup context as a remote span, and ensure it looks like we'd expect from a proper Span
+	validRemoteSpanContext := spanContext(t, testTraceID, testSpanID, true)
+	assert.True(t, validRemoteSpanContext.IsValid())
+	assert.True(t, validRemoteSpanContext.IsRemote())
+
+	ctx := oteltrace.ContextWithSpan(context.Background(), &mockSpan{
+		spanContext: validRemoteSpanContext,
+	})
+	assert.Equal(t, validRemoteSpanContext, oteltrace.SpanContextFromContext(ctx))
+
+	// Ensure that tracerFromContext decides to use the global provider.
+	// The mock SpanContext produces `noop.Tracer` while the global provider produces `trace.tracer`
+	_, isNoopTracer := testProvider.tracerFromContext(ctx).(noop.Tracer)
+	assert.False(t, isNoopTracer)
 }
 
 type mockTraceLogger struct {
